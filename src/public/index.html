@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <button id="btn-create">New Game</button>
+  <button id="btn-join">Join Game</button>
+
+  <div id="div-players">
+
+  </div>
+
+  <script type="module">
+    import { connect, StringCodec } from "https://cdn.skypack.dev/nats.ws";
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const sc = StringCodec();
+      const connection = await connect({ servers: "ws://localhost:9222" });
+
+      const btnCreate = document.getElementById('btn-create');
+      const btnJoin = document.getElementById('btn-join');
+      const divPlayers = document.getElementById('div-players');
+
+      const handshakeId = Date.now();
+
+      let clientId = null;
+      let gameId = null;
+
+      // listen for connect
+      const clientConnectSub = connection.subscribe(`client.connect.${handshakeId}`);
+      console.log('client', `client.connect.${handshakeId}`);
+      (async () => {
+        for await (const msg of clientConnectSub) {
+          const response = JSON.parse(sc.decode(msg.data));
+          clientId = response.clientId;
+          gameId = response.gameId;
+        }
+      })();
+
+      // publish - connect
+      const clientConnectPub = connection.publish('client.connect', sc.encode(JSON.stringify({
+        method: 'connect',
+        handshakeId: handshakeId,
+      })));
+
+      // create game request
+      btnCreate.addEventListener('click', () => {
+        const payload = {
+          clientId: clientId,
+        };
+        connection.publish("client.create", sc.encode(JSON.stringify(payload)));
+      });
+
+      // listen for create response from server
+      const serverCreateSub = connection.subscribe('server.create');
+      (async () => {
+        for await (const msg of serverCreateSub) {
+          const response = JSON.parse(sc.decode(msg.data));
+          gameId = response.game.id;
+
+          console.log('gameId', gameId);
+          console.log('clientId', clientId);
+          console.log("game successfully created with id " + gameId)
+
+        }
+      })();
+
+
+      // join game request
+      btnJoin.addEventListener('click', () => {
+        // if (gameId === null) {
+        //   gameId = inputGameId.value;
+        // }
+
+        const payload = {
+          clientId: clientId,
+          gameId: gameId,
+        };
+
+        // publish - join
+        connection.publish("client.join", sc.encode(JSON.stringify(payload)));
+      });
+
+      // listen for join response from server
+      const serverJoinSub = connection.subscribe('server.join');
+      (async () => {
+        for await (const msg of serverJoinSub) {
+          const response = JSON.parse(sc.decode(msg.data));
+
+          const game = response.game;
+          const cells = response.game.cells;
+
+          game.clients.forEach((client) => {
+            while (!divPlayers.firstChild) {
+              divPlayers.removeChild(divPlayers.firstChild)
+            }
+            const layout = document.createElement('div');
+
+          });
+
+          console.log('join - gameId', gameId);
+          console.log('response join', response.game);
+        }
+      })();
+    });
+  </script>
+</body>
+
+</html>
